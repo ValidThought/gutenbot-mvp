@@ -13,10 +13,12 @@ interface UseCameraReturn {
   error: string | null;
   isReady: boolean;
   isCapturing: boolean;
+  isRequestingPermission: boolean;
   startCamera: () => Promise<void>;
   stopCamera: () => void;
   capture: () => string | null;
   retake: () => void;
+  requestPermission: () => Promise<boolean>;
 }
 
 export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
@@ -27,10 +29,13 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
   const [error, setError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
 
   const startCamera = useCallback(async () => {
     try {
       setError(null);
+      setIsRequestingPermission(true);
+      
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode,
@@ -38,18 +43,41 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
           height: { ideal: height },
         },
       });
+      
       setStream(mediaStream);
+      setIsRequestingPermission(false);
+      
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
         await videoRef.current.play();
         setIsReady(true);
       }
     } catch (err) {
+      setIsRequestingPermission(false);
       const errorMessage = err instanceof Error ? err.message : 'Camera access denied';
       setError(errorMessage);
       console.error('[Camera] Error:', errorMessage);
     }
   }, [facingMode, width, height]);
+
+  const requestPermission = useCallback(async (): Promise<boolean> => {
+    try {
+      const permission = await navigator.permissions.query({ name: 'camera' as PermissionName });
+      if (permission.state === 'granted') {
+        await startCamera();
+        return true;
+      }
+      if (permission.state === 'prompt') {
+        await startCamera();
+        return true;
+      }
+      setError('Kameraberechtigung verweigert. Bitte erlauben Sie den Zugriff in den Browser-Einstellungen.');
+      return false;
+    } catch {
+      await startCamera();
+      return true;
+    }
+  }, [startCamera]);
 
   const stopCamera = useCallback(() => {
     if (stream) {
@@ -102,10 +130,12 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
     error,
     isReady,
     isCapturing,
+    isRequestingPermission,
     startCamera,
     stopCamera,
     capture,
     retake,
+    requestPermission,
   };
 }
 
