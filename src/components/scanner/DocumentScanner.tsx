@@ -236,11 +236,13 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
         className="relative aspect-[4/3] bg-black rounded-lg overflow-hidden"
       >
         <video 
-          ref={videoRef} 
+          ref={videoRef}
           className="absolute inset-0 w-full h-full object-cover"
-          playsInline 
-          muted 
+          playsInline
+          muted
           autoPlay
+          controls={false}
+          disablePictureInPicture
         />
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
         

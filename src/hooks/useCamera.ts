@@ -22,7 +22,7 @@ interface UseCameraReturn {
 }
 
 export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
-  const { facingMode = 'environment', width = 1920, height = 1080 } = options;
+  const { facingMode = 'environment', width = 1280, height = 720 } = options;
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -30,12 +30,17 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
   const [isReady, setIsReady] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const startCamera = useCallback(async () => {
     try {
       setError(null);
       setIsRequestingPermission(true);
       
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode,
@@ -44,13 +49,23 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
         },
       });
       
+      streamRef.current = mediaStream;
       setStream(mediaStream);
       setIsRequestingPermission(false);
       
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        await videoRef.current.play();
-        setIsReady(true);
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().then(() => {
+            setIsReady(true);
+          }).catch((playErr) => {
+            console.error('[Camera] Play error:', playErr);
+            setIsReady(true);
+          });
+        };
+        videoRef.current.onerror = () => {
+          setError('Video element error');
+        };
       }
     } catch (err) {
       setIsRequestingPermission(false);
@@ -62,31 +77,24 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
 
   const requestPermission = useCallback(async (): Promise<boolean> => {
     try {
-      const permission = await navigator.permissions.query({ name: 'camera' as PermissionName });
-      if (permission.state === 'granted') {
-        await startCamera();
-        return true;
-      }
-      if (permission.state === 'prompt') {
-        await startCamera();
-        return true;
-      }
-      setError('Kameraberechtigung verweigert. Bitte erlauben Sie den Zugriff in den Browser-Einstellungen.');
-      return false;
-    } catch {
+      setError(null);
       await startCamera();
       return true;
+    } catch {
+      setError('Kameraberechtigung verweigert');
+      return false;
     }
   }, [startCamera]);
 
   const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
-      setIsReady(false);
-      setIsCapturing(false);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
     }
-  }, [stream]);
+    setStream(null);
+    setIsReady(false);
+    setIsCapturing(false);
+  }, []);
 
   const capture = useCallback((): string | null => {
     if (!videoRef.current || !canvasRef.current) {
@@ -96,8 +104,8 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = video.videoWidth || 1920;
+    canvas.height = video.videoHeight || 1080;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {
@@ -117,11 +125,11 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
 
   useEffect(() => {
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [stream]);
+  }, []);
 
   return {
     videoRef,
