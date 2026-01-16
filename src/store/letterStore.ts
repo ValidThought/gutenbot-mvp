@@ -1,11 +1,21 @@
 import { create } from 'zustand';
 import type { Letter, LetterStatus, LetterClassification, LetterAnalysis } from '@/types';
 
+interface OCRResult {
+  text: string;
+  confidence: number;
+  wordCount: number;
+}
+
 interface LetterState {
   currentLetter: Letter | null;
+  ocrResult: OCRResult | null;
   isProcessing: boolean;
   error: string | null;
   setCurrentLetter: (letter: Letter) => void;
+  setOcrResult: (result: OCRResult) => void;
+  setClassification: (classification: LetterClassification) => void;
+  setAnalysis: (analysis: LetterAnalysis) => void;
   updateStatus: (status: LetterStatus) => void;
   setProcessing: (processing: boolean) => void;
   setError: (error: string | null) => void;
@@ -14,9 +24,23 @@ interface LetterState {
 
 export const useLetterStore = create<LetterState>((set) => ({
   currentLetter: null,
+  ocrResult: null,
   isProcessing: false,
   error: null,
   setCurrentLetter: (letter) => set({ currentLetter: letter, error: null }),
+  setOcrResult: (result) => set({ ocrResult: result }),
+  setClassification: (classification) =>
+    set((state) => ({
+      currentLetter: state.currentLetter
+        ? { ...state.currentLetter, classification, status: 'analyzed' as LetterStatus }
+        : null,
+    })),
+  setAnalysis: (analysis) =>
+    set((state) => ({
+      currentLetter: state.currentLetter
+        ? { ...state.currentLetter, analysis, status: 'analyzed' as LetterStatus }
+        : null,
+    })),
   updateStatus: (status) =>
     set((state) => ({
       currentLetter: state.currentLetter
@@ -25,7 +49,7 @@ export const useLetterStore = create<LetterState>((set) => ({
     })),
   setProcessing: (isProcessing) => set({ isProcessing }),
   setError: (error) => set({ error, isProcessing: false }),
-  reset: () => set({ currentLetter: null, isProcessing: false, error: null }),
+  reset: () => set({ currentLetter: null, ocrResult: null, isProcessing: false, error: null }),
 }));
 
 export function createMockLetter(overrides: Partial<Letter> = {}): Letter {

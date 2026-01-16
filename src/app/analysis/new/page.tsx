@@ -3,16 +3,23 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/store/userStore';
+import { useLetterStore } from '@/store/letterStore';
 import { ArrowRight, Clock, AlertTriangle, CheckCircle, Scale, FileText } from 'lucide-react';
-import { createMockLetter } from '@/store/letterStore';
+import type { LetterClassification, LetterAnalysis } from '@/types';
 
 type AnalysisStep = 'loading' | 'analyzing' | 'result' | 'error';
+
+interface AnalysisResult {
+  classification: LetterClassification;
+  analysis: LetterAnalysis;
+}
 
 export default function AnalysisPage() {
   const router = useRouter();
   const { profile, isOnboarded } = useUserStore();
+  const { ocrResult } = useLetterStore();
   const [step, setStep] = useState<AnalysisStep>('loading');
-  const [analysis, setAnalysis] = useState<any>(null);
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -21,83 +28,41 @@ export default function AnalysisPage() {
       return;
     }
 
-    // Simulate loading and analysis
-    const runAnalysis = async () => {
-      setStep('loading');
-      
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setStep('analyzing');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // For demo, use mock data - in real app would call /api/analyze
-      const mockLetter = createMockLetter({
-        classification: {
-          category: 'BESCHEID',
-          confidence: 0.95,
-          sender: {
-            name: 'Finanzamt Berlin',
-            type: 'government',
-            jurisdiction: profile?.bundesland || 'BE',
-          },
-          subject: 'Einkommensteuerbescheid 2024',
-          deadlines: [
-            {
-              id: '1',
-              type: 'widerspruch',
-              date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-              daysRemaining: 14,
-              urgency: 'high',
-              isLegal: true,
-              description: 'Widerspruchsfrist',
-            },
-          ],
-        },
-        analysis: {
-          summary: 'Das Finanzamt hat einen Einkommensteuerbescheid für 2024 erlassen.',
-          keyPoints: [
-            'Bescheid vom 15.01.2025',
-            'Widerspruchsfrist: 14 Tage',
-            'Betrag: 8.234 EUR',
-          ],
-          legalBasis: [
-            { law: 'EStG', paragraph: '§ 32a', description: 'Einkommensteuertarif', url: '', isLandesrecht: false },
-            { law: 'VwVfG Bln', paragraph: '§ 70', description: 'Widerspruchsverfahren', url: '', isLandesrecht: true },
-          ],
-          recommendedActions: [
-            {
-              id: '1',
-              title: 'Widerspruch einlegen',
-              description: 'Gegen den Bescheid Widerspruch einlegen',
-              complexity: 'moderate',
-              templateId: 'widerspruch',
-            },
-            {
-              id: '2',
-              title: 'Fristverlängerung beantragen',
-              description: 'Verlängerung der Widerspruchsfrist beantragen',
-              complexity: 'simple',
-              templateId: 'fristverlaengerung',
-            },
-          ],
-          risks: [
-            {
-              id: '1',
-              description: 'Fristversäumnis führt zu Rechtskraft',
-              severity: 'high',
-              mitigation: 'Frist im Kalender eintragen, frühzeitig handeln',
-            },
-          ],
-        },
-      });
+    if (!ocrResult) {
+      router.push('/scan');
+      return;
+    }
 
-      setAnalysis(mockLetter);
-      setStep('result');
+    const runAnalysis = async () => {
+      setStep('analyzing');
+
+      try {
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: ocrResult.text,
+            bundesland: profile?.bundesland || 'BE',
+            userId: profile?.id,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Analyse fehlgeschlagen');
+        }
+
+        const result = await response.json();
+        setAnalysis(result);
+        setStep('result');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Analyse fehlgeschlagen');
+        setStep('error');
+      }
     };
 
     runAnalysis();
-  }, [isOnboarded, profile]);
+  }, [isOnboarded, ocrResult, profile]);
 
   if (!isOnboarded) {
     return null;
@@ -174,6 +139,10 @@ export default function AnalysisPage() {
         </div>
       </div>
     );
+  }
+
+  if (step !== 'result' || !analysis) {
+    return null;
   }
 
   return (

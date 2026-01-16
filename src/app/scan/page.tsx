@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/store/userStore';
+import { useLetterStore } from '@/store/letterStore';
 import { useFileUpload } from '@/hooks/useCamera';
 import { DocumentScanner } from '@/components/scanner/DocumentScanner';
 import { ArrowRight, Camera, Upload, RefreshCw, Check, AlertCircle } from 'lucide-react';
@@ -10,6 +11,7 @@ import { ArrowRight, Camera, Upload, RefreshCw, Check, AlertCircle } from 'lucid
 export default function ScannerPage() {
   const router = useRouter();
   const { profile, isOnboarded } = useUserStore();
+  const { setOcrResult: storeOcrResult } = useLetterStore();
   const [mode, setMode] = useState<'smart' | 'upload' | 'preview'>('smart');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +132,11 @@ export default function ScannerPage() {
 
   const handleContinue = () => {
     if (ocrResult) {
+      storeOcrResult({
+        text: ocrResult.text,
+        confidence: ocrResult.confidence,
+        wordCount: ocrResult.text.split(/\s+/).length,
+      });
       router.push('/analysis/new');
     }
   };
