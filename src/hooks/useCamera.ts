@@ -33,88 +33,82 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
   const streamRef = useRef<MediaStream | null>(null);
 
   const startCamera = useCallback(async () => {
-    try {
-      setError(null);
-      setIsRequestingPermission(true);
-      await new Promise(resolve => setTimeout(resolve, 10));
-      
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
+    console.log('[Camera] startCamera called');
+    
+    setError(null);
+    setIsRequestingPermission(true);
+    
+    if (streamRef.current) {
+      console.log('[Camera] Stopping existing stream');
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setStream(null);
+    setIsReady(false);
 
-      const constraints = {
-        video: {
-          facingMode,
-          width: { ideal: width },
-          height: { ideal: height },
-        },
-      };
+    const constraints = {
+      video: {
+        facingMode,
+        width: { ideal: width },
+        height: { ideal: height },
+      },
+    };
 
-      console.log('[Camera] Requesting media with constraints:', constraints);
-      
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints).catch(async (err) => {
-        await new Promise(resolve => setTimeout(resolve, 100));
+    console.log('[Camera] Creating timeout promise (10s)...');
+    const timeoutPromise = new Promise((_, reject) => {
+      const timeoutId = setTimeout(() => {
+        console.log('[Camera] Timeout reached!');
+        reject(new Error('Camera request timeout after 10s'));
+      }, 10000);
+    });
+
+    console.log('[Camera] Calling getUserMedia...');
+    const mediaStreamPromise = navigator.mediaDevices.getUserMedia(constraints)
+      .then(stream => {
+        console.log('[Camera] getUserMedia succeeded');
+        return stream;
+      })
+      .catch(err => {
+        console.log('[Camera] getUserMedia failed:', err.message);
         throw err;
       });
+
+    try {
+      console.log('[Camera] Racing promises...');
+      const stream = await Promise.race<MediaStream>([mediaStreamPromise, timeoutPromise as Promise<MediaStream>]);
+      console.log('[Camera] Got stream:', stream ? 'yes' : 'no');
       
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Camera request timeout')), 30000)
-      );
-      
-      const finalStream = await Promise.race([mediaStream, timeoutPromise]);
-      const streamToUse = finalStream as MediaStream;
-      
-      streamRef.current = streamToUse;
-      setStream(streamToUse);
+      streamRef.current = stream;
+      setStream(stream);
       setIsRequestingPermission(false);
-      
-      console.log('[Camera] Media stream obtained, connecting to video element');
+      console.log('[Camera] States updated, stream is set');
       
       if (videoRef.current) {
-        videoRef.current.srcObject = streamToUse;
+        console.log('[Camera] Setting srcObject...');
+        videoRef.current.srcObject = stream;
         
         videoRef.current.onloadedmetadata = () => {
-          console.log('[Camera] Video metadata loaded, dimensions:', videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
+          console.log('[Camera] Metadata loaded');
         };
         
         videoRef.current.oncanplay = () => {
-          console.log('[Camera] Video can play now');
+          console.log('[Camera] Can play');
         };
         
         videoRef.current.onerror = (e) => {
           console.error('[Camera] Video error:', e);
-          setError('Video element error');
         };
 
-        const playPromise = videoRef.current.play();
-        if (playPromise !== undefined) {
-          playPromise.then(() => {
-            console.log('[Camera] Video play() resolved, isReady=true');
-            setIsReady(true);
-          }).catch((playErr) => {
-            console.error('[Camera] Video play() rejected:', playErr);
-            // Fallback: still set ready after delay even if play fails
-            setTimeout(() => {
-              console.log('[Camera] Setting isReady=true as fallback after play error');
-              setIsReady(true);
-            }, 1000);
-          });
-        } else {
-          console.log('[Camera] Video play() returned undefined, isReady=true');
-          setIsReady(true);
-        }
-        
-        // Safety fallback: ensure isReady is set within 5 seconds
-        setTimeout(() => {
-          console.log('[Camera] Safety timeout - setting isReady=true');
-          setIsReady(true);
-        }, 5000);
+        console.log('[Camera] Calling play()...');
+        await videoRef.current.play();
+        console.log('[Camera] Play succeeded, setting isReady=true');
+        setIsReady(true);
       }
     } catch (err) {
+      console.error('[Camera] Error in startCamera:', err);
       setIsRequestingPermission(false);
       const errorMessage = err instanceof Error ? err.message : 'Camera access denied';
       setError(errorMessage);
-      console.error('[Camera] Error:', errorMessage);
     }
   }, [facingMode, width, height]);
 
