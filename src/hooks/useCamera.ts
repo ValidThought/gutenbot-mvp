@@ -31,81 +31,91 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
   const [isCapturing, setIsCapturing] = useState(false);
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
+  const operationInProgress = useRef(false);
 
-  const startCamera = useCallback(async () => {
-    console.log('[Camera] startCamera called');
-    
-    setError(null);
-    setIsRequestingPermission(true);
-    
+  const stopCamera = useCallback(() => {
+    console.log('[Camera] stopCamera called');
     if (streamRef.current) {
-      console.log('[Camera] Stopping existing stream');
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
     setStream(null);
     setIsReady(false);
+    setIsCapturing(false);
+    setError(null);
+    operationInProgress.current = false;
+  }, []);
 
-    const constraints = {
-      video: {
-        facingMode,
-        width: { ideal: width },
-        height: { ideal: height },
-      },
-    };
-
-    console.log('[Camera] Creating timeout promise (10s)...');
-    const timeoutPromise = new Promise((_, reject) => {
-      const timeoutId = setTimeout(() => {
-        console.log('[Camera] Timeout reached!');
-        reject(new Error('Camera request timeout after 10s'));
-      }, 10000);
-    });
-
-    console.log('[Camera] Calling getUserMedia...');
-    const mediaStreamPromise = navigator.mediaDevices.getUserMedia(constraints)
-      .then(stream => {
-        console.log('[Camera] getUserMedia succeeded');
-        return stream;
-      })
-      .catch(err => {
-        console.log('[Camera] getUserMedia failed:', err.message);
-        throw err;
-      });
+  const startCamera = useCallback(async () => {
+    console.log('[Camera] startCamera called, isRequestingPermission:', isRequestingPermission);
+    
+    if (operationInProgress.current) {
+      console.log('[Camera] Operation already in progress, ignoring');
+      return;
+    }
+    
+    operationInProgress.current = true;
+    setIsRequestingPermission(true);
+    setError(null);
+    
+    // Safety: ensure we always reset state after 15 seconds
+    const safetyTimeout = setTimeout(() => {
+      console.log('[Camera] Safety timeout - resetting state');
+      operationInProgress.current = false;
+      setIsRequestingPermission(false);
+      if (!streamRef.current) {
+        setError('Kamera antwortet nicht. Bitte erneut versuchen.');
+      }
+    }, 15000);
 
     try {
-      console.log('[Camera] Racing promises...');
-      const stream = await Promise.race<MediaStream>([mediaStreamPromise, timeoutPromise as Promise<MediaStream>]);
-      console.log('[Camera] Got stream:', stream ? 'yes' : 'no');
+      // Stop any existing stream first
+      if (streamRef.current) {
+        console.log('[Camera] Stopping existing stream');
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      setStream(null);
+      setIsReady(false);
+
+      const constraints = {
+        video: {
+          facingMode,
+          width: { ideal: width },
+          height: { ideal: height },
+        },
+      };
+
+      console.log('[Camera] Calling getUserMedia...');
+      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       
-      streamRef.current = stream;
-      setStream(stream);
+      console.log('[Camera] getUserMedia succeeded');
+      clearTimeout(safetyTimeout);
+      
+      streamRef.current = mediaStream;
+      setStream(mediaStream);
       setIsRequestingPermission(false);
-      console.log('[Camera] States updated, stream is set');
+      operationInProgress.current = false;
+      
+      console.log('[Camera] Stream set, now playing video...');
       
       if (videoRef.current) {
-        console.log('[Camera] Setting srcObject...');
-        videoRef.current.srcObject = stream;
+        videoRef.current.srcObject = mediaStream;
         
-        videoRef.current.onloadedmetadata = () => {
-          console.log('[Camera] Metadata loaded');
-        };
-        
-        videoRef.current.oncanplay = () => {
-          console.log('[Camera] Can play');
-        };
-        
-        videoRef.current.onerror = (e) => {
-          console.error('[Camera] Video error:', e);
-        };
-
-        console.log('[Camera] Calling play()...');
-        await videoRef.current.play();
-        console.log('[Camera] Play succeeded, setting isReady=true');
-        setIsReady(true);
+        try {
+          await videoRef.current.play();
+          console.log('[Camera] Video play succeeded');
+          setIsReady(true);
+        } catch (playErr) {
+          console.error('[Camera] Video play failed:', playErr);
+          // Even if play fails, set ready so capture button shows
+          setIsReady(true);
+        }
       }
     } catch (err) {
-      console.error('[Camera] Error in startCamera:', err);
+      console.error('[Camera] Error:', err);
+      clearTimeout(safetyTimeout);
+      operationInProgress.current = false;
       setIsRequestingPermission(false);
       const errorMessage = err instanceof Error ? err.message : 'Camera access denied';
       setError(errorMessage);
@@ -122,16 +132,6 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
       return false;
     }
   }, [startCamera]);
-
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    setStream(null);
-    setIsReady(false);
-    setIsCapturing(false);
-  }, []);
 
   const capture = useCallback((): string | null => {
     if (!videoRef.current || !canvasRef.current) {
