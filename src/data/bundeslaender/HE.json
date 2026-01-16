@@ -1,0 +1,97 @@
+{
+  "code": "HE",
+  "name": "Hessen",
+  "capital": "Wiesbaden",
+  "legalContext": {
+    "verwaltungsverfahrensgesetz": "HVwVfG",
+    "verwaltungsgerichtskostengesetz": "HVGKG",
+    "widerspruchsFrist": 30,
+    "widerspruchsFristVerlaengerung": 30,
+    "klagefrist": 30,
+    "zustaendigeGerichte": {
+      "verwaltungsgericht": "Verwaltungsgericht Wiesbaden",
+      "adresse": "Mainzer Straße 55, 65189 Wiesbaden",
+      "telefon": "0611 1398-0",
+      "website": "https://vg-wiesbaden.justiz.hessen.de"
+    },
+    "landesrecht": {
+      "name": "Hessisches Verwaltungsverfahrensgesetz",
+      "abbreviation": "HVwVfG",
+      "relevantParagraphs": [
+        { "paragraph": "§ 35", "title": "Verwaltungsakt", "description": "Definition und Wirksamkeit von Verwaltungsakten" },
+        { "paragraph": "§ 37", "title": "Begründung", "description": "Anforderungen an die Begründung" },
+        { "paragraph": "§ 39", "title": "Offenlegung", "description": "Bekanntgabe von Bescheiden" },
+        { "paragraph": "§ 70", "title": "Widerspruch", "description": "Widerspruchsverfahren" },
+        { "paragraph": "§ 73", "title": "Widerspruchsentscheidung", "description": "Entscheidung über Widerspruch" }
+      ]
+    }
+  },
+  "commonAuthorities": [
+    {
+      "name": "Finanzamt",
+      "pattern": ["finanzamt", "steuerbescheid", "einkommensteuer", "umsatzsteuer"],
+      "responseTemplate": "widerspruch_steuer",
+      "contactInfo": {
+        "website": "https://finanzamt.hessen.de"
+      }
+    },
+    {
+      "name": "Gemeinde-/Stadtverwaltung",
+      "pattern": ["gemeinde", "stadtverwaltung", "ortskern", "baugenehmigung"],
+      "responseTemplate": "allgemeine_anfrage",
+      "contactInfo": {
+        "website": "https://innen.hessen.de"
+      }
+    },
+    {
+      "name": "Jobcenter Hessen",
+      "pattern": ["jobcenter", "arbeitslosengeld", "bürgergeld", "grundsicherung"],
+      "responseTemplate": "widerspruch_jobcenter",
+      "contactInfo": {
+        "website": "https://jobcenter-hessen.de"
+      }
+    },
+    {
+      "name": "Kreisverwaltung",
+      "pattern": ["kreisverwaltung", "kreis", "untere Verwaltungsbehörde"],
+      "responseTemplate": "stellungnahme_kreis",
+      "contactInfo": {
+        "website": "https://innen.hessen.de/kreisverwaltungen"
+      }
+    },
+    {
+      "name": "Straßenverkehrsbehörde",
+      "pattern": ["straßenverkehr", "kfz", "führerschein", "verkehrszeichen"],
+      "responseTemplate": "widerspruch_verkehr",
+      "contactInfo": {
+        "website": "https://wirtschaft.hessen.de/verkehr"
+      }
+    }
+  ],
+  "deadlines": {
+    "defaultWiderspruch": 30,
+    "defaultKlage": 30,
+    "defaultStellungnahme": 14,
+    "defaultZahlung": 14
+  },
+  "specificLaws": [
+    {
+      "name": "Hessisches Polizeigesetz",
+      "abbreviation": "HSG",
+      "relevantParagraphs": ["§ 8", "§ 9", "§ 10"],
+      "description": "Polizeigesetz für Hessen"
+    },
+    {
+      "name": "Hessische Bauordnung",
+      "abbreviation": "HBO",
+      "relevantParagraphs": ["§ 55", "§ 56", "§ 57"],
+      "description": "Bauordnung für Hessen"
+    },
+    {
+      "name": "Hessisches Meldegesetz",
+      "abbreviation": "HMG",
+      "relevantParagraphs": ["§ 10", "§ 11", "§ 12"],
+      "description": "Meldegesetz für Hessen"
+    }
+  ]
+}

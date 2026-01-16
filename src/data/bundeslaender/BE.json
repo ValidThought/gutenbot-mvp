@@ -1,0 +1,106 @@
+{
+  "code": "BE",
+  "name": "Berlin",
+  "capital": "Berlin",
+  "legalContext": {
+    "verwaltungsverfahrensgesetz": "VwVfG Berlin",
+    "verwaltungsgerichtskostengesetz": "VGKG Berlin",
+    "widerspruchsFrist": 30,
+    "widerspruchsFristVerlaengerung": 30,
+    "klagefrist": 30,
+    "zustaendigeGerichte": {
+      "verwaltungsgericht": "Verwaltungsgericht Berlin",
+      "adresse": "Kirchstraße 7, 10557 Berlin",
+      "telefon": "030 90140-0",
+      "website": "https://www.berlin.de/verwaltungsgericht"
+    },
+    "landesrecht": {
+      "name": "Berliner Verwaltungsverfahrensgesetz",
+      "abbreviation": "VwVfG Bln",
+      "relevantParagraphs": [
+        { "paragraph": "§ 35", "title": "Verwaltungsakt", "description": "Definition und Wirksamkeit von Verwaltungsakten" },
+        { "paragraph": "§ 37", "title": "Begründung", "description": "Anforderungen an die Begründung von Bescheiden" },
+        { "paragraph": "§ 39", "title": "Offenlegung", "description": "Wie Bescheide bekannt gegeben werden" },
+        { "paragraph": "§ 70", "title": "Widerspruch", "description": "Widerspruchsverfahren und -fristen" },
+        { "paragraph": "§ 73", "title": "Widerspruchsentscheidung", "description": "Entscheidung über den Widerspruch" }
+      ]
+    }
+  },
+  "commonAuthorities": [
+    {
+      "name": "Finanzamt",
+      "pattern": ["finanzamt", "steuerbescheid", "einkommensteuer", "umsatzsteuer", "gewerbesteuer"],
+      "responseTemplate": "widerspruch_steuer",
+      "contactInfo": {
+        "email": "finanzamt@berlin.de",
+        "website": "https://www.finanzamt.berlin.de"
+      }
+    },
+    {
+      "name": "Bürgeramt",
+      "pattern": ["bürgeramt", "meldebescheinigung", "personalausweis", "reisepass", "anmeldung"],
+      "responseTemplate": "allgemeine_anfrage",
+      "contactInfo": {
+        "website": "https://service.berlin.de/buergeramt"
+      }
+    },
+    {
+      "name": "Jobcenter",
+      "pattern": ["jobcenter", "arbeitslosengeld", "bürgergeld", "grundsicherung", "harz-iv"],
+      "responseTemplate": "widerspruch_jobcenter",
+      "contactInfo": {
+        "website": "https://www.jobcenter.berlin.de"
+      }
+    },
+    {
+      "name": "Bauamt",
+      "pattern": ["bauamt", "bauantrag", "baugenehmigung", "bauordnung", "stellplatz"],
+      "responseTemplate": "stellungnahme_bau",
+      "contactInfo": {
+        "website": "https://www.berlin.de/baugen"
+      }
+    },
+    {
+      "name": "Ausländerbehörde",
+      "pattern": ["ausländerbehörde", "aufenthaltstitel", "visum", "asyl", "duldung"],
+      "responseTemplate": "stellungnahme_auslaender",
+      "contactInfo": {
+        "website": "https://www.berlin.de/auslaenderbehoerde"
+      }
+    },
+    {
+      "name": "Straßenverkehrsamt",
+      "pattern": ["straßenverkehrsamt", "kfz-zulassung", "führerschein", "verkehrsordnungswidrigkeit"],
+      "responseTemplate": "widerspruch_verkehr",
+      "contactInfo": {
+        "website": "https://www.berlin.de/strassenverkehr"
+      }
+    }
+  ],
+  "deadlines": {
+    "defaultWiderspruch": 30,
+    "defaultKlage": 30,
+    "defaultStellungnahme": 14,
+    "defaultZahlung": 14
+  },
+  "specificLaws": [
+    {
+      "name": "Allgemeines Sicherheits- und Ordnungsgesetz",
+      "abbreviation": "ASOG Bln",
+      "relevantParagraphs": ["§ 17", "§ 18", "§ 19"],
+      "description": "Allgemeine Polizeigesetz für Berlin"
+    },
+    {
+      "name": "Bauordnung Berlin",
+      "abbreviation": "BauO Bln",
+      "relevantParagraphs": ["§ 62", "§ 63", "§ 64"],
+      "description": "Bauordnung für Berlin"
+    },
+    {
+      "name": "Meldegesetz",
+      "abbreviation": "MeldeG Bln",
+      "relevantParagraphs": ["§ 11", "§ 12", "§ 13"],
+      "description": "Meldegesetz für Berlin"
+    }
+  ]
+}
