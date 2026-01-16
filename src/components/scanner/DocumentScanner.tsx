@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useCamera } from '@/hooks/useCamera';
 import { Camera, RefreshCw, Check, AlertCircle, Loader2, Shield, Settings, Maximize2 } from 'lucide-react';
 
@@ -32,6 +32,30 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
   const [showPermissionDialog, setShowPermissionDialog] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [showGuidelines, setShowGuidelines] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const updateContainerSize = useCallback(() => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setContainerSize({ width: rect.width, height: rect.height });
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    updateContainerSize();
+    
+    const resizeObserver = new ResizeObserver(() => {
+      updateContainerSize();
+    });
+    
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+    
+    return () => resizeObserver.disconnect();
+  }, [updateContainerSize]);
 
   useEffect(() => {
     const initCamera = async () => {
@@ -208,12 +232,7 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
       </div>
 
       <div 
-        ref={(el) => {
-          if (el) {
-            const rect = el.getBoundingClientRect();
-            setContainerSize({ width: rect.width, height: rect.height });
-          }
-        }}
+        ref={containerRef}
         className="relative aspect-[4/3] bg-black rounded-lg overflow-hidden"
       >
         <video 
