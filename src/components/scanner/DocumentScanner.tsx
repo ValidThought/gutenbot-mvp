@@ -54,15 +54,23 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
 
   useEffect(() => {
     if (videoRef.current && stream) {
+      console.log('[Scanner] Stream received, setting srcObject');
       videoRef.current.srcObject = stream;
       const playVideo = async () => {
         try {
+          console.log('[Scanner] Starting video play...');
           await videoRef.current?.play();
+          console.log('[Scanner] Video playing successfully');
         } catch (e) {
-          console.error('Auto-play failed:', e);
+          console.error('[Scanner] Auto-play failed:', e);
         }
       };
       playVideo();
+    } else {
+      console.log('[Scanner] No stream yet or videoRef not ready', { 
+        hasVideoRef: !!videoRef.current, 
+        hasStream: !!stream 
+      });
     }
   }, [stream]);
 
@@ -251,7 +259,6 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
           className="absolute inset-0 w-full h-full object-cover"
           playsInline
           muted
-          autoPlay
           controls={false}
           style={{ display: stream ? 'block' : 'none' }}
         />

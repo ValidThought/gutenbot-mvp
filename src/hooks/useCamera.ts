@@ -89,15 +89,26 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
         const playPromise = videoRef.current.play();
         if (playPromise !== undefined) {
           playPromise.then(() => {
-            console.log('[Camera] Video started playing');
+            console.log('[Camera] Video play() resolved, isReady=true');
             setIsReady(true);
           }).catch((playErr) => {
-            console.error('[Camera] Play error:', playErr);
-            setIsReady(true);
+            console.error('[Camera] Video play() rejected:', playErr);
+            // Fallback: still set ready after delay even if play fails
+            setTimeout(() => {
+              console.log('[Camera] Setting isReady=true as fallback after play error');
+              setIsReady(true);
+            }, 1000);
           });
         } else {
+          console.log('[Camera] Video play() returned undefined, isReady=true');
           setIsReady(true);
         }
+        
+        // Safety fallback: ensure isReady is set within 5 seconds
+        setTimeout(() => {
+          console.log('[Camera] Safety timeout - setting isReady=true');
+          setIsReady(true);
+        }, 5000);
       }
     } catch (err) {
       setIsRequestingPermission(false);
