@@ -12,6 +12,7 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const hasStartedRef = useRef(false);
   
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,18 +20,15 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const stopStream = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    setIsReady(false);
-  }, []);
-
   const startCamera = useCallback(async () => {
+    if (hasStartedRef.current) {
+      console.log('[Scanner] Already started, skipping...');
+      return;
+    }
+    
     console.log('[Scanner] Starting camera...');
+    hasStartedRef.current = true;
     setError(null);
-    stopStream();
 
     try {
       const constraints = {
@@ -41,32 +39,57 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
         },
       };
 
+      console.log('[Scanner] Requesting permission...');
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log('[Scanner] Permission granted');
+      
       streamRef.current = stream;
+      setIsReady(true);
       
       if (videoRef.current) {
+        console.log('[Scanner] Setting video source...');
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        console.log('[Scanner] Camera playing');
-        setIsReady(true);
+        
+        videoRef.current.onloadedmetadata = () => {
+          console.log('[Scanner] Metadata loaded');
+        };
+        
+        videoRef.current.onerror = (err) => {
+          console.error('[Scanner] Video error:', err);
+        };
+        
+        // Try to play, but don't wait for it
+        videoRef.current.play().then(() => {
+          console.log('[Scanner] Video playing');
+        }).catch((e) => {
+          console.log('[Scanner] Play failed (ok, button still works):', e);
+        });
       }
     } catch (err) {
       console.error('[Scanner] Camera error:', err);
       setError(err instanceof Error ? err.message : 'Camera failed');
-      setIsReady(false);
+      hasStartedRef.current = false;
     }
-  }, [stopStream]);
+  }, []);
+
+  const stopStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    hasStartedRef.current = false;
+    setIsReady(false);
+  }, []);
 
   useEffect(() => {
-    // Auto-start camera
-    console.log('[Scanner] Component mounted, starting camera...');
+    console.log('[Scanner] Component mounted');
     startCamera();
 
     return () => {
-      console.log('[Scanner] Component unmounted, stopping camera...');
+      console.log('[Scanner] Component unmounted');
       stopStream();
     };
-  }, []);
+  }, [startCamera, stopStream]);
 
   useEffect(() => {
     const updateSize = () => {
@@ -86,7 +109,12 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
   }, []);
 
   const handleCapture = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current) return;
+    console.log('[Scanner] Capture clicked, isReady:', isReady);
+    
+    if (!videoRef.current || !canvasRef.current) {
+      console.error('[Scanner] Refs not available');
+      return;
+    }
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -94,13 +122,16 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
     canvas.height = video.videoHeight || 720;
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      console.error('[Scanner] No canvas context');
+      return;
+    }
 
     ctx.drawImage(video, 0, 0);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-    console.log('[Scanner] Captured image:', dataUrl.substring(0, 50) + '...');
+    console.log('[Scanner] Captured image, length:', dataUrl.length);
     onCapture(dataUrl);
-  }, [onCapture]);
+  }, [onCapture, isReady]);
 
   const calculateFrame = () => {
     if (containerSize.width === 0 || containerSize.height === 0) return null;
@@ -165,7 +196,7 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
         className="relative w-full bg-black rounded-lg overflow-hidden"
         style={{ aspectRatio: '3/4' }}
       >
-        {!isReady && !error && (
+        {!isReady && (
           <div className="absolute inset-0 flex items-center justify-center">
             <Loader2 className="w-12 h-12 animate-spin text-white" />
           </div>
@@ -176,6 +207,7 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
           className="absolute inset-0 w-full h-full object-cover"
           playsInline
           muted
+          autoPlay
           style={{ display: isReady ? 'block' : 'none' }}
         />
 
@@ -207,17 +239,17 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
         {isReady && (
           <button
             onClick={handleCapture}
-            className="absolute bottom-6 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full bg-white border-4 border-primary flex items-center justify-center shadow-lg z-10"
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 w-20 h-20 rounded-full bg-white border-4 border-primary flex items-center justify-center shadow-lg z-10 cursor-pointer"
             aria-label="Scannen"
           >
-            <div className="w-12 h-12 rounded-full bg-primary" />
+            <div className="w-14 h-14 rounded-full bg-primary" />
           </button>
         )}
 
         {onCancel && (
           <button
             onClick={onCancel}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center z-10"
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center z-10 cursor-pointer"
             aria-label="Abbrechen"
           >
             <X className="w-5 h-5" />
@@ -230,7 +262,7 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
         {isReady && (
           <button
             onClick={startCamera}
-            className="flex items-center gap-1 hover:text-foreground"
+            className="flex items-center gap-1 hover:text-foreground cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" />Neu starten
           </button>
