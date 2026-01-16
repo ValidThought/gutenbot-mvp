@@ -41,31 +41,51 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
 
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
+      const constraints = {
         video: {
           facingMode,
           width: { ideal: width },
           height: { ideal: height },
         },
-      });
+      };
+
+      console.log('[Camera] Requesting media with constraints:', constraints);
+      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       
       streamRef.current = mediaStream;
       setStream(mediaStream);
       setIsRequestingPermission(false);
       
+      console.log('[Camera] Media stream obtained, connecting to video element');
+      
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        
         videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().then(() => {
+          console.log('[Camera] Video metadata loaded, dimensions:', videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);
+        };
+        
+        videoRef.current.oncanplay = () => {
+          console.log('[Camera] Video can play now');
+        };
+        
+        videoRef.current.onerror = (e) => {
+          console.error('[Camera] Video error:', e);
+          setError('Video element error');
+        };
+
+        const playPromise = videoRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.then(() => {
+            console.log('[Camera] Video started playing');
             setIsReady(true);
           }).catch((playErr) => {
             console.error('[Camera] Play error:', playErr);
             setIsReady(true);
           });
-        };
-        videoRef.current.onerror = () => {
-          setError('Video element error');
-        };
+        } else {
+          setIsReady(true);
+        }
       }
     } catch (err) {
       setIsRequestingPermission(false);

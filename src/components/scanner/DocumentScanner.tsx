@@ -29,7 +29,6 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [showGuidelines, setShowGuidelines] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [videoAspect, setVideoAspect] = useState(4 / 3);
 
   const updateContainerSize = useCallback(() => {
     if (containerRef.current) {
@@ -55,22 +54,25 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
   }, [updateContainerSize]);
 
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.onloadedmetadata = () => {
-        if (videoRef.current) {
-          const aspect = videoRef.current.videoWidth / videoRef.current.videoHeight;
-          setVideoAspect(aspect);
-        }
-      };
-    }
-  }, [stream]);
-
-  useEffect(() => {
     const initCamera = async () => {
       await requestPermission();
     };
     initCamera();
   }, [requestPermission]);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+      const playVideo = async () => {
+        try {
+          await videoRef.current?.play();
+        } catch (e) {
+          console.error('Auto-play failed:', e);
+        }
+      };
+      playVideo();
+    }
+  }, [stream]);
 
   const handleCapture = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -249,7 +251,14 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
           playsInline
           muted
           autoPlay
+          controls={false}
+          style={{ display: stream ? 'block' : 'none' }}
         />
+        {stream && !isReady && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-white" />
+          </div>
+        )}
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none hidden" />
         
         {showGuidelines && frame && (
