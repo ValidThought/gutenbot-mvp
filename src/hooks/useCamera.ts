@@ -36,6 +36,7 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
     try {
       setError(null);
       setIsRequestingPermission(true);
+      await new Promise(resolve => setTimeout(resolve, 10));
       
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
@@ -50,16 +51,27 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
       };
 
       console.log('[Camera] Requesting media with constraints:', constraints);
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       
-      streamRef.current = mediaStream;
-      setStream(mediaStream);
+      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints).catch(async (err) => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        throw err;
+      });
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Camera request timeout')), 30000)
+      );
+      
+      const finalStream = await Promise.race([mediaStream, timeoutPromise]);
+      const streamToUse = finalStream as MediaStream;
+      
+      streamRef.current = streamToUse;
+      setStream(streamToUse);
       setIsRequestingPermission(false);
       
       console.log('[Camera] Media stream obtained, connecting to video element');
       
       if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
+        videoRef.current.srcObject = streamToUse;
         
         videoRef.current.onloadedmetadata = () => {
           console.log('[Camera] Video metadata loaded, dimensions:', videoRef.current?.videoWidth, 'x', videoRef.current?.videoHeight);

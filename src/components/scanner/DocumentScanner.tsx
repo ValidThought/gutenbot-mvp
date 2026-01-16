@@ -67,7 +67,12 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
   }, [stream]);
 
   const handleStartCamera = useCallback(async () => {
-    await startCamera();
+    console.log('[Camera] User clicked start camera button');
+    try {
+      await startCamera();
+    } catch (err) {
+      console.error('[Camera] Failed to start:', err);
+    }
   }, [startCamera]);
 
   const handleCapture = useCallback(() => {
@@ -192,7 +197,7 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
     );
   }
 
-  if (isRequestingPermission || (!stream && !error)) {
+  if (isRequestingPermission) {
     return (
       <div className="w-full max-w-md mx-auto bg-black rounded-lg flex flex-col items-center justify-center min-h-[400px]">
         <Loader2 className="w-12 h-12 animate-spin text-white mb-4" />
