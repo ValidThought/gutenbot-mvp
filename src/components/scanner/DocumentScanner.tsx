@@ -2,12 +2,16 @@
 
 import React, { useEffect, useState } from 'react';
 import { useCamera } from '@/hooks/useCamera';
-import { Camera, RefreshCw, Check, AlertCircle, Loader2, Shield, Settings } from 'lucide-react';
+import { Camera, RefreshCw, Check, AlertCircle, Loader2, Shield, Settings, Maximize2 } from 'lucide-react';
 
 interface DocumentScannerProps {
   onCapture: (imageData: string) => void;
   onCancel?: () => void;
 }
+
+// A4 aspect ratio: 210mm × 297mm = 1:1.414
+const A4_ASPECT_RATIO = 1 / Math.sqrt(2); // ≈ 0.707
+const A4_WIDTH_RATIO = 0.75; // A4 width as percentage of container
 
 export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
   const {
@@ -26,6 +30,8 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
   } = useCamera({ facingMode: 'environment' });
 
   const [showPermissionDialog, setShowPermissionDialog] = useState(false);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [showGuidelines, setShowGuidelines] = useState(true);
 
   useEffect(() => {
     const initCamera = async () => {
@@ -55,6 +61,32 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
     setShowPermissionDialog(false);
     window.open('chrome://settings/content/camera', '_blank');
   };
+
+  const calculateA4Frame = () => {
+    if (containerSize.width === 0 || containerSize.height === 0) return null;
+    
+    const containerAspect = containerSize.width / containerSize.height;
+    const a4Aspect = A4_ASPECT_RATIO;
+    
+    let frameWidth, frameHeight, frameX, frameY;
+    
+    if (containerAspect > a4Aspect) {
+      // Container is wider - fit A4 to height
+      frameHeight = containerSize.height * A4_WIDTH_RATIO;
+      frameWidth = frameHeight * a4Aspect;
+    } else {
+      // Container is taller - fit A4 to width
+      frameWidth = containerSize.width * A4_WIDTH_RATIO;
+      frameHeight = frameWidth / a4Aspect;
+    }
+    
+    frameX = (containerSize.width - frameWidth) / 2;
+    frameY = (containerSize.height - frameHeight) / 2;
+    
+    return { width: frameWidth, height: frameHeight, x: frameX, y: frameY };
+  };
+
+  const frame = calculateA4Frame();
 
   if (error) {
     const isPermissionDenied = error.toLowerCase().includes('denied') || 
@@ -153,31 +185,97 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
         <div>
           <h2 className="text-xl font-bold">Brief scannen</h2>
           <p className="text-muted-foreground text-sm">
-            {isReady ? 'Bereit zum Scannen' : 'Kamera wird gestartet...'}
+            {isReady ? 'Positionieren Sie das Dokument im Rahmen' : 'Kamera wird gestartet...'}
           </p>
         </div>
-        {isReady && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-green-100 text-green-700">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            Live
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowGuidelines(!showGuidelines)}
+            className={`p-2 rounded-lg transition-colors ${
+              showGuidelines ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+            }`}
+            title="Führungslinien umschalten"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+          {isReady && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-green-100 text-green-700">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              Live
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="relative aspect-[4/3] bg-black rounded-lg overflow-hidden">
+      <div 
+        ref={(el) => {
+          if (el) {
+            const rect = el.getBoundingClientRect();
+            setContainerSize({ width: rect.width, height: rect.height });
+          }
+        }}
+        className="relative aspect-[4/3] bg-black rounded-lg overflow-hidden"
+      >
         <video 
           ref={videoRef} 
-          className="absolute inset-0 w-full h-full object-cover" 
+          className="absolute inset-0 w-full h-full object-cover"
           playsInline 
           muted 
           autoPlay
         />
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
         
+        {showGuidelines && frame && (
+          <>
+            {/* A4 Frame */}
+            <div
+              className="absolute border-2 border-white/80 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]"
+              style={{
+                left: frame.x,
+                top: frame.y,
+                width: frame.width,
+                height: frame.height,
+              }}
+            />
+            
+            {/* Corner Markers */}
+            {[
+              { x: frame.x, y: frame.y }, // Top-left
+              { x: frame.x + frame.width - 30, y: frame.y }, // Top-right
+              { x: frame.x, y: frame.y + frame.height - 30 }, // Bottom-left
+              { x: frame.x + frame.width - 30, y: frame.y + frame.height - 30 }, // Bottom-right
+            ].map((corner, i) => (
+              <React.Fragment key={i}>
+                {/* Horizontal line */}
+                <div
+                  className="absolute bg-primary w-8 h-1"
+                  style={{ left: corner.x - (i % 2 === 0 ? 0 : 8), top: corner.y }}
+                />
+                {/* Vertical line */}
+                <div
+                  className="absolute bg-primary w-1 h-8"
+                  style={{ left: corner.x, top: corner.y - (i < 2 ? 0 : 8) }}
+                />
+              </React.Fragment>
+            ))}
+            
+            {/* A4 Label */}
+            <div
+              className="absolute bg-black/60 text-white text-xs px-2 py-1 rounded"
+              style={{
+                left: frame.x + 8,
+                top: frame.y + frame.height + 4,
+              }}
+            >
+              A4 Format
+            </div>
+          </>
+        )}
+        
         {isReady && (
           <button
             onClick={handleCapture}
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full bg-white border-4 border-primary flex items-center justify-center shadow-lg hover:scale-105 transition-transform"
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full bg-white border-4 border-primary flex items-center justify-center shadow-lg hover:scale-105 transition-transform z-10"
             aria-label="Scannen"
           >
             <div className="w-12 h-12 rounded-full bg-primary" />
@@ -187,7 +285,7 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
         {onCancel && (
           <button
             onClick={onCancel}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors"
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors z-10"
             aria-label="Abbrechen"
           >
             ✕
@@ -196,7 +294,7 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
       </div>
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <p>Richten Sie die Kamera auf das Dokument</p>
+        <p>Richten Sie den Brief im A4-Rahmen aus</p>
         {isReady && (
           <button
             onClick={handleRetake}
