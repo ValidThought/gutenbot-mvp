@@ -22,7 +22,6 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
     stopCamera,
     capture,
     retake,
-    requestPermission,
   } = useCamera({ facingMode: 'environment' });
 
   const [showPermissionDialog, setShowPermissionDialog] = useState(false);
@@ -54,13 +53,6 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
   }, [updateContainerSize]);
 
   useEffect(() => {
-    const initCamera = async () => {
-      await requestPermission();
-    };
-    initCamera();
-  }, [requestPermission]);
-
-  useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
       const playVideo = async () => {
@@ -73,6 +65,10 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
       playVideo();
     }
   }, [stream]);
+
+  const handleStartCamera = useCallback(async () => {
+    await startCamera();
+  }, [startCamera]);
 
   const handleCapture = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -100,7 +96,7 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
 
   const handleRequestPermission = async () => {
     setShowPermissionDialog(false);
-    await requestPermission();
+    await startCamera();
   };
 
   const handleOpenSettings = () => {
@@ -155,7 +151,7 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
             <Shield className="w-4 h-4" />Berechtigung erteilen
           </button>
           <button
-            onClick={startCamera}
+            onClick={handleStartCamera}
             className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg font-medium flex items-center gap-2"
           >
             <RefreshCw className="w-4 h-4" />Erneut versuchen
@@ -211,7 +207,7 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
         <Camera className="w-12 h-12 text-muted-foreground mb-4" />
         <p className="text-center font-medium">Kamera nicht verfügbar</p>
         <button
-          onClick={startCamera}
+          onClick={handleStartCamera}
           className="mt-4 px-6 py-2 bg-primary text-primary-foreground rounded-lg font-medium flex items-center gap-2"
         >
           <Camera className="w-4 h-4" />Kamera starten

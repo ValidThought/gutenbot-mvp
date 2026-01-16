@@ -6,7 +6,9 @@ import { useUserStore } from '@/store/userStore';
 import { useLetterStore } from '@/store/letterStore';
 import { useFileUpload } from '@/hooks/useCamera';
 import { DocumentScanner } from '@/components/scanner/DocumentScanner';
-import { ArrowRight, Camera, Upload, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { ArrowRight, Camera, Upload, RefreshCw, Check, AlertCircle, FileText, Image, Send, Download } from 'lucide-react';
+
+type PreviewView = 'original' | 'text';
 
 export default function ScannerPage() {
   const router = useRouter();
@@ -19,6 +21,8 @@ export default function ScannerPage() {
     text: string;
     confidence: number;
   } | null>(null);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [previewView, setPreviewView] = useState<PreviewView>('text');
   const [hydrated, setHydrated] = useState(false);
 
   const {
@@ -56,6 +60,7 @@ export default function ScannerPage() {
   }
 
   const handleCameraCapture = async (imageData: string) => {
+    setCapturedImage(imageData);
     await processImageDataUrl(imageData);
   };
 
@@ -66,6 +71,14 @@ export default function ScannerPage() {
     handleFileSelect(e);
     setMode('preview');
     setIsProcessing(true);
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      if (ev.target?.result) {
+        setCapturedImage(ev.target.result as string);
+      }
+    };
+    reader.readAsDataURL(selectedFile);
 
     await processImageFromFile(selectedFile);
   };
@@ -143,11 +156,13 @@ export default function ScannerPage() {
 
   const handleRetake = () => {
     setOcrResult(null);
+    setCapturedImage(null);
     setError(null);
     if (file) {
       clearFile();
     }
     setMode('smart');
+    setPreviewView('text');
   };
 
   if (!isOnboarded) {
@@ -243,7 +258,7 @@ export default function ScannerPage() {
         {/* Preview / Processing */}
         {mode === 'preview' && (
           <div className="space-y-4">
-            <div className="aspect-[4/3] bg-muted rounded-lg p-4 overflow-auto">
+            <div className="aspect-[4/3] bg-muted rounded-lg overflow-hidden">
               {isProcessing ? (
                 <div className="h-full flex flex-col items-center justify-center">
                   <RefreshCw className="w-12 h-12 animate-spin text-primary mb-4" />
@@ -264,37 +279,101 @@ export default function ScannerPage() {
                   </button>
                 </div>
               ) : ocrResult ? (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Check className="w-5 h-5 text-green-500" />
-                    <span className="font-medium">
-                      {Math.round(ocrResult.confidence)}% Erkennungsgenauigkeit
-                    </span>
+                <>
+                  <div className="flex gap-2 p-2 border-b border-border bg-card">
+                    <button
+                      onClick={() => setPreviewView('original')}
+                      className={`flex-1 py-2 px-4 rounded-md flex items-center justify-center gap-2 transition-colors ${
+                        previewView === 'original' 
+                          ? 'bg-primary text-primary-foreground' 
+                          : 'bg-muted hover:bg-muted/80'
+                      }`}
+                    >
+                      <Image className="w-4 h-4" />
+                      Original
+                    </button>
+                    <button
+                      onClick={() => setPreviewView('text')}
+                      className={`flex-1 py-2 px-4 rounded-md flex items-center justify-center gap-2 transition-colors ${
+                        previewView === 'text' 
+                          ? 'bg-primary text-primary-foreground' 
+                          : 'bg-muted hover:bg-muted/80'
+                      }`}
+                    >
+                      <FileText className="w-4 h-4" />
+                      Erkannter Text
+                    </button>
                   </div>
-                  <pre className="text-xs whitespace-pre-wrap bg-muted p-2 rounded">
-                    {ocrResult.text.substring(0, 500)}
-                    {ocrResult.text.length > 500 && '...'}
-                  </pre>
-                </div>
+                  
+                  <div className="h-[calc(100%-56px)] overflow-auto p-4">
+                    {previewView === 'original' && capturedImage && (
+                      <img
+                        src={capturedImage}
+                        alt="Scanned document"
+                        className="w-full h-auto object-contain"
+                      />
+                    )}
+                    {previewView === 'text' && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Check className="w-5 h-5 text-green-500" />
+                          <span className="font-medium">
+                            {Math.round(ocrResult.confidence)}% Erkennungsgenauigkeit
+                          </span>
+                        </div>
+                        <pre className="text-sm whitespace-pre-wrap bg-muted p-4 rounded-lg">
+                          {ocrResult.text}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                </>
               ) : null}
             </div>
 
             {ocrResult && (
-              <div className="flex gap-2">
-                <button
-                  onClick={handleRetake}
-                  className="flex-1 py-3 bg-muted rounded-lg font-medium"
-                >
-                  Neu aufnehmen
-                </button>
-                <button
-                  onClick={handleContinue}
-                  className="flex-1 py-3 bg-primary text-primary-foreground rounded-lg font-medium flex items-center justify-center gap-2"
-                >
-                  Weiter
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
+              <>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const blob = new Blob([ocrResult.text], { type: 'text/plain' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'erkannter-brief.txt';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="flex-1 py-3 bg-secondary text-secondary-foreground rounded-lg font-medium flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    PDF herunterladen
+                  </button>
+                  <button
+                    onClick={() => alert('Entwurf gespeichert - kommt bald')}
+                    className="flex-1 py-3 bg-muted text-muted-foreground rounded-lg font-medium flex items-center justify-center gap-2"
+                  >
+                    <Send className="w-4 h-4" />
+                    Als Entwurf senden
+                  </button>
+                </div>
+                
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleRetake}
+                    className="flex-1 py-3 bg-muted rounded-lg font-medium"
+                  >
+                    Neu aufnehmen
+                  </button>
+                  <button
+                    onClick={handleContinue}
+                    className="flex-1 py-3 bg-primary text-primary-foreground rounded-lg font-medium flex items-center justify-center gap-2"
+                  >
+                    Weiter
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </>
             )}
           </div>
         )}
