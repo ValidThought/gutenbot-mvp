@@ -18,7 +18,6 @@ interface UseCameraReturn {
   stopCamera: () => void;
   capture: () => string | null;
   retake: () => void;
-  requestPermission: () => Promise<boolean>;
 }
 
 export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
@@ -31,53 +30,13 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
   const [isCapturing, setIsCapturing] = useState(false);
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
-  const operationInProgress = useRef(false);
-
-  const stopCamera = useCallback(() => {
-    console.log('[Camera] stopCamera called');
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    setStream(null);
-    setIsReady(false);
-    setIsCapturing(false);
-    setError(null);
-    operationInProgress.current = false;
-  }, []);
 
   const startCamera = useCallback(async () => {
-    console.log('[Camera] startCamera called, isRequestingPermission:', isRequestingPermission);
-    
-    if (operationInProgress.current) {
-      console.log('[Camera] Operation already in progress, ignoring');
-      return;
-    }
-    
-    operationInProgress.current = true;
-    setIsRequestingPermission(true);
+    console.log('[useCamera] startCamera called');
     setError(null);
-    
-    // Safety: ensure we always reset state after 15 seconds
-    const safetyTimeout = setTimeout(() => {
-      console.log('[Camera] Safety timeout - resetting state');
-      operationInProgress.current = false;
-      setIsRequestingPermission(false);
-      if (!streamRef.current) {
-        setError('Kamera antwortet nicht. Bitte erneut versuchen.');
-      }
-    }, 15000);
+    setIsRequestingPermission(true);
 
     try {
-      // Stop any existing stream first
-      if (streamRef.current) {
-        console.log('[Camera] Stopping existing stream');
-        streamRef.current.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-      }
-      setStream(null);
-      setIsReady(false);
-
       const constraints = {
         video: {
           facingMode,
@@ -86,56 +45,39 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
         },
       };
 
-      console.log('[Camera] Calling getUserMedia...');
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-      
-      console.log('[Camera] getUserMedia succeeded');
-      clearTimeout(safetyTimeout);
-      
-      streamRef.current = mediaStream;
-      setStream(mediaStream);
+      console.log('[useCamera] Requesting camera...');
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log('[useCamera] Camera granted');
+
+      streamRef.current = stream;
+      setStream(stream);
       setIsRequestingPermission(false);
-      operationInProgress.current = false;
-      
-      console.log('[Camera] Stream set, now playing video...');
-      
+      setIsReady(true);
+
       if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        
-        try {
-          await videoRef.current.play();
-          console.log('[Camera] Video play succeeded');
-          setIsReady(true);
-        } catch (playErr) {
-          console.error('[Camera] Video play failed:', playErr);
-          // Even if play fails, set ready so capture button shows
-          setIsReady(true);
-        }
+        videoRef.current.srcObject = stream;
       }
     } catch (err) {
-      console.error('[Camera] Error:', err);
-      clearTimeout(safetyTimeout);
-      operationInProgress.current = false;
+      console.error('[useCamera] Error:', err);
       setIsRequestingPermission(false);
-      const errorMessage = err instanceof Error ? err.message : 'Camera access denied';
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Camera access denied');
     }
   }, [facingMode, width, height]);
 
-  const requestPermission = useCallback(async (): Promise<boolean> => {
-    try {
-      setError(null);
-      await startCamera();
-      return true;
-    } catch {
-      setError('Kameraberechtigung verweigert');
-      return false;
+  const stopCamera = useCallback(() => {
+    console.log('[useCamera] stopCamera called');
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
-  }, [startCamera]);
+    setStream(null);
+    setIsReady(false);
+    setIsCapturing(false);
+  }, []);
 
   const capture = useCallback((): string | null => {
     if (!videoRef.current || !canvasRef.current) {
-      console.error('[Camera] Video or canvas ref not available');
+      console.error('[useCamera] Refs not available');
       return null;
     }
 
@@ -146,13 +88,12 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      console.error('[Camera] Could not get canvas context');
+      console.error('[useCamera] No canvas context');
       return null;
     }
 
     ctx.drawImage(video, 0, 0);
     setIsCapturing(true);
-
     return canvas.toDataURL('image/jpeg', 0.9);
   }, []);
 
@@ -163,7 +104,7 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
   useEffect(() => {
     return () => {
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
@@ -180,7 +121,6 @@ export function useCamera(options: UseCameraOptions = {}): UseCameraReturn {
     stopCamera,
     capture,
     retake,
-    requestPermission,
   };
 }
 
@@ -193,14 +133,12 @@ export function useFileUpload() {
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
 
-    // Validate file type
     const validTypes = ['image/jpeg', 'image/png', 'image/tiff', 'image/webp'];
     if (!validTypes.includes(selectedFile.type)) {
       setError('Bitte wählen Sie ein Bildformat (JPEG, PNG, TIFF oder WebP)');
       return;
     }
 
-    // Validate file size (max 10MB)
     if (selectedFile.size > 10 * 1024 * 1024) {
       setError('Datei ist zu groß. Maximale Größe: 10MB');
       return;
@@ -209,7 +147,6 @@ export function useFileUpload() {
     setFile(selectedFile);
     setError(null);
 
-    // Create preview
     const reader = new FileReader();
     reader.onload = (e) => {
       setPreview(e.target?.result as string);

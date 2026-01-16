@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useCamera } from '@/hooks/useCamera';
-import { Camera, RefreshCw, AlertCircle, Loader2, Shield, Settings, Maximize2 } from 'lucide-react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Camera, RefreshCw, Maximize2, Loader2, X } from 'lucide-react';
 
 interface DocumentScannerProps {
   onCapture: (imageData: string) => void;
@@ -10,55 +9,80 @@ interface DocumentScannerProps {
 }
 
 export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
-  const {
-    videoRef,
-    canvasRef,
-    stream,
-    error,
-    isReady,
-    isCapturing,
-    isRequestingPermission,
-    startCamera,
-    stopCamera,
-    capture,
-    retake,
-  } = useCamera({ facingMode: 'environment' });
-
-  const [showPermissionDialog, setShowPermissionDialog] = useState(false);
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  
+  const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showGuidelines, setShowGuidelines] = useState(true);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const updateContainerSize = useCallback(() => {
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        setContainerSize({ width: rect.width, height: rect.height });
-      }
+  const stopStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
+    setIsReady(false);
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    console.log('[Scanner] Starting camera...');
+    setError(null);
+    stopStream();
+
+    try {
+      const constraints = {
+        video: {
+          facingMode: 'environment' as const,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        console.log('[Scanner] Camera playing');
+        setIsReady(true);
+      }
+    } catch (err) {
+      console.error('[Scanner] Camera error:', err);
+      setError(err instanceof Error ? err.message : 'Camera failed');
+      setIsReady(false);
+    }
+  }, [stopStream]);
+
+  useEffect(() => {
+    // Auto-start camera
+    console.log('[Scanner] Component mounted, starting camera...');
+    startCamera();
+
+    return () => {
+      console.log('[Scanner] Component unmounted, stopping camera...');
+      stopStream();
+    };
   }, []);
 
   useEffect(() => {
-    updateContainerSize();
-    
-    const resizeObserver = new ResizeObserver(() => {
-      updateContainerSize();
-    });
-    
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
-    }
-    
-    return () => resizeObserver.disconnect();
-  }, [updateContainerSize]);
-
-  // Auto-start camera on mount
-  useEffect(() => {
-    const initCamera = async () => {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      await startCamera();
+    const updateSize = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setContainerSize({ width: rect.width, height: rect.height });
+      }
     };
-    initCamera();
+
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => observer.disconnect();
   }, []);
 
   const handleCapture = useCallback(() => {
@@ -66,142 +90,51 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    
-    const videoWidth = video.videoWidth || 1280;
-    const videoHeight = video.videoHeight || 720;
-    
-    canvas.width = videoWidth;
-    canvas.height = videoHeight;
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
-    onCapture(canvas.toDataURL('image/jpeg', 0.9));
+    ctx.drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    console.log('[Scanner] Captured image:', dataUrl.substring(0, 50) + '...');
+    onCapture(dataUrl);
   }, [onCapture]);
 
-  const handleRetake = () => {
-    retake();
-    startCamera();
-  };
-
-  const handleRequestPermission = async () => {
-    setShowPermissionDialog(false);
-    await startCamera();
-  };
-
-  const handleOpenSettings = () => {
-    setShowPermissionDialog(false);
-    window.open('chrome://settings/content/camera', '_blank');
-  };
-
-  const calculateA4Frame = () => {
+  const calculateFrame = () => {
     if (containerSize.width === 0 || containerSize.height === 0) return null;
     
-    const a4Aspect = 1 / Math.sqrt(2);
+    const aspect = 1 / Math.sqrt(2);
     const containerAspect = containerSize.width / containerSize.height;
     
-    let frameWidth, frameHeight, frameX, frameY;
+    let width, height, x, y;
     
-    if (containerAspect > a4Aspect) {
-      frameHeight = containerSize.height * 0.85;
-      frameWidth = frameHeight * a4Aspect;
+    if (containerAspect > aspect) {
+      height = containerSize.height * 0.85;
+      width = height * aspect;
     } else {
-      frameWidth = containerSize.width * 0.85;
-      frameHeight = frameWidth / a4Aspect;
+      width = containerSize.width * 0.85;
+      height = width / aspect;
     }
     
-    frameX = (containerSize.width - frameWidth) / 2;
-    frameY = (containerSize.height - frameHeight) / 2;
+    x = (containerSize.width - width) / 2;
+    y = (containerSize.height - height) / 2;
     
-    return { width: frameWidth, height: frameHeight, x: frameX, y: frameY };
+    return { width, height, x, y };
   };
 
-  const frame = calculateA4Frame();
+  const frame = calculateFrame();
 
   if (error) {
-    const isPermissionDenied = error.toLowerCase().includes('denied') || 
-                               error.toLowerCase().includes('permission') ||
-                               error.toLowerCase().includes('not allowed');
-
     return (
       <div className="w-full max-w-md mx-auto bg-muted rounded-lg flex flex-col items-center justify-center p-6 min-h-[400px]">
-        <AlertCircle className="w-12 h-12 text-destructive mb-4" />
-        <p className="text-center font-medium text-destructive">Kamerazugriff fehlgeschlagen</p>
-        <p className="text-sm text-muted-foreground mt-2 text-center">
-          {isPermissionDenied 
-            ? 'Kameraberechtigung wurde verweigert. Bitte erlauben Sie den Zugriff auf die Kamera.'
-            : error}
-        </p>
-        
-        <div className="flex gap-2 mt-4">
-          <button
-            onClick={() => setShowPermissionDialog(true)}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium flex items-center gap-2"
-          >
-            <Shield className="w-4 h-4" />Berechtigung erteilen
-          </button>
-          <button
-            onClick={startCamera}
-            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg font-medium flex items-center gap-2"
-          >
-            <RefreshCw className="w-4 h-4" />Erneut versuchen
-          </button>
-        </div>
-
-        {showPermissionDialog && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-card rounded-lg p-6 max-w-sm w-full shadow-lg">
-              <h3 className="text-lg font-semibold mb-2">Kamerazugriff erlauben</h3>
-              <p className="text-muted-foreground mb-4">
-                GutenBot benötigt Zugriff auf Ihre Kamera, um Dokumente zu scannen.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleRequestPermission}
-                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium"
-                >
-                  Erlauben
-                </button>
-                <button
-                  onClick={handleOpenSettings}
-                  className="flex-1 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg font-medium flex items-center justify-center gap-2"
-                >
-                  <Settings className="w-4 h-4" />Einstellungen
-                </button>
-              </div>
-              <button
-                onClick={() => setShowPermissionDialog(false)}
-                className="w-full mt-2 py-2 text-sm text-muted-foreground hover:text-foreground"
-              >
-                Abbrechen
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (isRequestingPermission) {
-    return (
-      <div className="w-full max-w-md mx-auto bg-black rounded-lg flex flex-col items-center justify-center min-h-[400px]">
-        <Loader2 className="w-12 h-12 animate-spin text-white mb-4" />
-        <p className="text-center font-medium text-white">Kamera wird gestartet...</p>
-      </div>
-    );
-  }
-
-  if (!stream) {
-    return (
-      <div className="w-full max-w-md mx-auto bg-muted rounded-lg flex flex-col items-center justify-center p-6 min-h-[400px]">
-        <Camera className="w-12 h-12 text-muted-foreground mb-4" />
-        <p className="text-center font-medium">Kamera nicht verfügbar</p>
+        <p className="text-center text-destructive font-medium mb-4">{error}</p>
         <button
           onClick={startCamera}
-          className="mt-4 px-6 py-2 bg-primary text-primary-foreground rounded-lg font-medium flex items-center gap-2"
+          className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-medium flex items-center gap-2"
         >
-          <Camera className="w-4 h-4" />Kamera starten
+          <RefreshCw className="w-4 h-4" />Erneut versuchen
         </button>
       </div>
     );
@@ -232,21 +165,22 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
         className="relative w-full bg-black rounded-lg overflow-hidden"
         style={{ aspectRatio: '3/4' }}
       >
+        {!isReady && !error && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 className="w-12 h-12 animate-spin text-white" />
+          </div>
+        )}
+
         <video
           ref={videoRef}
           className="absolute inset-0 w-full h-full object-cover"
           playsInline
           muted
-          controls={false}
-          style={{ display: stream ? 'block' : 'none' }}
+          style={{ display: isReady ? 'block' : 'none' }}
         />
-        {stream && !isReady && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Loader2 className="w-8 h-8 animate-spin text-white" />
-          </div>
-        )}
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none hidden" />
-        
+
+        <canvas ref={canvasRef} className="hidden" />
+
         {showGuidelines && frame && (
           <>
             <div
@@ -258,26 +192,6 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
                 height: frame.height,
               }}
             />
-            
-            {[
-              { x: frame.x, y: frame.y },
-              { x: frame.x + frame.width - 30, y: frame.y },
-              { x: frame.x, y: frame.y + frame.height - 30 },
-              { x: frame.x + frame.width - 30, y: frame.y + frame.height - 30 },
-            ].map((corner, i) => (
-              <React.Fragment key={i}>
-                <div
-                  className="absolute bg-primary"
-                  style={{
-                    left: corner.x,
-                    top: corner.y,
-                    width: i % 2 === 0 ? 30 : 8,
-                    height: i < 2 ? 8 : 30,
-                  }}
-                />
-              </React.Fragment>
-            ))}
-            
             <div
               className="absolute bg-black/60 text-white text-xs px-2 py-1 rounded"
               style={{
@@ -289,7 +203,7 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
             </div>
           </>
         )}
-        
+
         {isReady && (
           <button
             onClick={handleCapture}
@@ -299,14 +213,14 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
             <div className="w-12 h-12 rounded-full bg-primary" />
           </button>
         )}
-        
+
         {onCancel && (
           <button
             onClick={onCancel}
             className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center z-10"
             aria-label="Abbrechen"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
         )}
       </div>
@@ -315,7 +229,7 @@ export function DocumentScanner({ onCapture, onCancel }: DocumentScannerProps) {
         <p>Richten Sie den Brief im A4-Rahmen aus</p>
         {isReady && (
           <button
-            onClick={handleRetake}
+            onClick={startCamera}
             className="flex items-center gap-1 hover:text-foreground"
           >
             <RefreshCw className="w-4 h-4" />Neu starten
