@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/store/userStore';
 import { useLetterStore } from '@/store/letterStore';
@@ -9,6 +9,7 @@ import { DocumentScanner } from '@/components/scanner/DocumentScanner';
 import { ArrowRight, Camera, Upload, RefreshCw, Check, AlertCircle, FileText, Image, Send, Download } from 'lucide-react';
 
 type PreviewView = 'original' | 'text';
+type ToastType = 'info' | 'error' | 'success';
 
 export default function ScannerPage() {
   const router = useRouter();
@@ -24,6 +25,7 @@ export default function ScannerPage() {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [previewView, setPreviewView] = useState<PreviewView>('text');
   const [hydrated, setHydrated] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   const {
     file,
@@ -42,6 +44,17 @@ export default function ScannerPage() {
       router.push('/onboarding');
     }
   }, [hydrated, isOnboarded, router]);
+
+  const showToast = useCallback((message: string, type: ToastType = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const handleCameraError = useCallback((errorMessage: string) => {
+    console.log('[Scan] Camera error, switching to upload:', errorMessage);
+    showToast('Kamera nicht verfügbar. Bitte Bild hochladen.', 'error');
+    setMode('upload');
+  }, [showToast]);
 
   if (!hydrated) {
     return (
@@ -180,6 +193,18 @@ export default function ScannerPage() {
           </p>
         </div>
 
+        {/* Toast Notification */}
+        {toast && (
+          <div className={`mb-4 p-4 rounded-lg flex items-center gap-2 ${
+            toast.type === 'error' ? 'bg-destructive/10 text-destructive' :
+            toast.type === 'success' ? 'bg-green-500/10 text-green-500' :
+            'bg-muted text-muted-foreground'
+          }`}>
+            <AlertCircle className="w-4 h-4" />
+            <span className="text-sm">{toast.message}</span>
+          </div>
+        )}
+
         {/* Mode Selection */}
         <div className="flex gap-2 mb-4">
           <button
@@ -206,6 +231,7 @@ export default function ScannerPage() {
         {mode === 'smart' && (
           <DocumentScanner
             onCapture={handleCameraCapture}
+            onCameraError={handleCameraError}
             onCancel={() => setMode('upload')}
           />
         )}
