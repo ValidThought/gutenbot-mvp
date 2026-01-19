@@ -43,6 +43,20 @@ export function DocumentScanner({ onCapture, onCameraError, onCancel }: Document
     setCameraState('loading');
     clearTimeoutRef();
 
+    // Safety timeout - must respond within 8 seconds
+    timeoutRef.current = setTimeout(() => {
+      console.log('[Scanner] Safety timeout triggered');
+      if (cameraState !== 'ready') {
+        console.log('[Scanner] Camera did not become ready in time');
+        setCameraState('error');
+        setErrorMessage('Kamera antwortet nicht. Bitte erneut versuchen oder Bild hochladen.');
+        hasStartedRef.current = false;
+        if (onCameraError) {
+          onCameraError('timeout');
+        }
+      }
+    }, 8000);
+
     try {
       const constraints = {
         video: {
@@ -52,15 +66,16 @@ export function DocumentScanner({ onCapture, onCameraError, onCancel }: Document
         },
       };
 
-      console.log('[Scanner] Requesting permission...');
+      console.log('[Scanner] Calling getUserMedia...');
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log('[Scanner] Permission granted');
+      console.log('[Scanner] getUserMedia succeeded, tracks:', stream.getTracks().length);
       
       streamRef.current = stream;
       setCameraState('playing');
+      console.log('[Scanner] State set to playing');
       
       if (videoRef.current) {
-        console.log('[Scanner] Setting video source...');
+        console.log('[Scanner] Setting video srcObject...');
         videoRef.current.srcObject = stream;
         
         videoRef.current.onloadedmetadata = () => {
@@ -72,33 +87,30 @@ export function DocumentScanner({ onCapture, onCameraError, onCancel }: Document
         };
         
         videoRef.current.onplaying = () => {
-          console.log('[Scanner] Video is playing, ready to capture');
+          console.log('[Scanner] Video is playing - ready to capture!');
           setCameraState('ready');
           clearTimeoutRef();
         };
-        
+
         videoRef.current.onwaiting = () => {
           console.log('[Scanner] Video is waiting for data...');
         };
+        
+        videoRef.current.onended = () => {
+          console.log('[Scanner] Video ended');
+        };
 
+        console.log('[Scanner] Calling video.play()...');
         const playPromise = videoRef.current.play();
-        if (playPromise !== undefined) {
-          playPromise.then(() => {
-            console.log('[Scanner] Play promise resolved');
-          }).catch((e) => {
-            console.log('[Scanner] Play promise rejected:', e);
-          });
-        }
+        playPromise.then(() => {
+          console.log('[Scanner] play() resolved');
+        }).catch((e) => {
+          console.log('[Scanner] play() rejected:', e.message);
+          // Even if play fails, we're in a valid state
+          setCameraState('ready');
+          clearTimeoutRef();
+        });
       }
-
-      // Safety timeout: if not ready within 10 seconds, fail
-      timeoutRef.current = setTimeout(() => {
-        if (cameraState === 'loading' || cameraState === 'playing') {
-          console.log('[Scanner] Timeout - camera did not become ready');
-          setCameraState('error');
-          setErrorMessage('Kamera antwortet nicht. Bitte erneut versuchen.');
-        }
-      }, 10000);
       
     } catch (err) {
       console.error('[Scanner] Camera error:', err);
@@ -106,8 +118,9 @@ export function DocumentScanner({ onCapture, onCameraError, onCancel }: Document
       setCameraState('error');
       const message = err instanceof Error ? err.message : 'Kamerafehler';
       setErrorMessage(message);
+      clearTimeoutRef();
       
-      // Notify parent to switch to upload
+      console.log('[Scanner] Calling onCameraError callback');
       if (onCameraError) {
         onCameraError(message);
       }
@@ -131,11 +144,17 @@ export function DocumentScanner({ onCapture, onCameraError, onCancel }: Document
   }, [startCamera]);
 
   useEffect(() => {
-    console.log('[Scanner] Component mounted, starting camera...');
-    startCamera();
+    console.log('[Scanner] Component mounted');
+    
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(() => {
+      console.log('[Scanner] Starting camera after delay');
+      startCamera();
+    }, 100);
 
     return () => {
       console.log('[Scanner] Component unmounted, stopping camera...');
+      clearTimeout(timer);
       stopStream();
     };
   }, [startCamera, stopStream]);
@@ -255,23 +274,29 @@ export function DocumentScanner({ onCapture, onCameraError, onCancel }: Document
         className="relative w-full bg-black rounded-lg overflow-hidden"
         style={{ aspectRatio: '3/4' }}
       >
-        {isLoading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
-            <Loader2 className="w-12 h-12 animate-spin text-white mb-4" />
-            <p className="text-white text-center text-sm px-4">
-              {cameraState === 'initial' 
-                ? 'Kamera wird vorbereitet...'
-                : 'Kamerazugriff wird angefordert...'}
+        {/* Loading State */}
+        {cameraState === 'loading' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black">
+            <Loader2 className="w-16 h-16 animate-spin text-white mb-4" />
+            <p className="text-white text-center text-lg px-4">
+              Kamerazugriff wird angefordert...
+            </p>
+            <p className="text-white/60 text-center text-sm px-4 mt-2">
+              Bitte erlauben Sie den Zugriff auf die Kamera
             </p>
           </div>
         )}
 
+        {/* Playing State - Video loading */}
         {cameraState === 'playing' && (
-          <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-            <div className="bg-black/30 px-4 py-2 rounded-full">
-              <p className="text-white text-sm">Video wird geladen...</p>
+          <>
+            <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+              <div className="bg-black/50 px-6 py-3 rounded-full flex items-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin text-white" />
+                <p className="text-white text-sm">Video wird geladen...</p>
+              </div>
             </div>
-          </div>
+          </>
         )}
 
         <video
@@ -341,9 +366,17 @@ export function DocumentScanner({ onCapture, onCameraError, onCancel }: Document
             </button>
           </>
         ) : cameraState === 'playing' ? (
-          <p>Warten auf Kamera...</p>
-        ) : (
+          <p className="flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />Video wird geladen...
+          </p>
+        ) : cameraState === 'loading' ? (
+          <p className="flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />Kamera wird gestartet...
+          </p>
+        ) : cameraState === 'initial' ? (
           <p>Initialisiere...</p>
+        ) : (
+          <p>Kamerafehler</p>
         )}
       </div>
     </div>
